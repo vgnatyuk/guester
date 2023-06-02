@@ -1,6 +1,5 @@
-USERNAME = ''
-PASSWORD = ''
+INSTAGRAM_USERNAME = ''
+INSTAGRAM_PASSWORD = ''
 TELEGRAM_BOT_API_TOKEN = ''
-CHAT_ID = ''
-CHANNEL_ID = ''
-PATTERNS = []
+TELEGRAM_CHAT_ID = '' # CHAT ID to send messages
+PATTERNS = [] # list of words to find in instagram posts. ex.: ['sunny', 'party']
