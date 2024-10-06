@@ -1,3 +1,6 @@
+import asyncio
+import random
+
 import requests
 from aiogram import Bot
 from datetime import datetime
@@ -23,6 +26,8 @@ class MediaMessage:
 
 
 class GuestBartending:
+    LOGO_USER_ID = env.LOGO_USER_ID
+    LOGO_CHANEL_ID = env.LOGO_CHANEL_ID
     def __init__(self):
         self.client = Client()
         self.client.logout()
@@ -66,9 +71,11 @@ class GuestBartending:
         return messages_to_send
 
     def add_message_to_queue(self, media_data, queue: list, message=None):
-        sleep(1)  # нужно для того, чтобы инстаграм не ругался на слишком частые запросы
+        sleep((random.randint(7, 9)/10))  # нужно для того, чтобы инстаграм не ругался на слишком частые запросы
 
         media_url = media_data.video_url or media_data.thumbnail_url
+        if not media_url:
+            media_url = media_data.resources[0].video_url or media_data.resources[0].thumbnail_url
         media_bytes = requests.get(media_url).content
         media_type = "video" if media_data.video_url else "photo"
         if message is None:
@@ -76,31 +83,37 @@ class GuestBartending:
 
         queue.append(
             MediaMessage(
-                chat_id=env.CHAT_ID,
+                chat_id=env.CHAT_ID if not media_data.user.pk == self.LOGO_USER_ID else self.LOGO_CHANEL_ID,
                 media_type=media_type,
                 media=media_bytes,
-                caption=message,
+                caption=message[:1000], # todo выяснить максимум для каждого типа
                 parse_mode="HTML",
             )
         )
 
-    def parse_following_accounts(self):
-        following = list(self.client.user_following(self.user_id).keys())
+    async def parse_following_accounts(self):
+        # following = list(self.client.user_following(self.user_id).keys())
+        following = [self.LOGO_USER_ID]
         messages_to_send = []
         for user_id in following:
             medias = self.client.user_medias(user_id, 20)
-            messages = self.parse_medias(medias)
+            messages = self.parse_medias(medias, use_patterns=user_id != self.LOGO_USER_ID)
             messages_to_send += messages
-        self.send_messages(messages_to_send)
+        await self.send_messages(messages_to_send)
+        await self.client
 
-    def parse_medias(self, medias) -> list:
+    def parse_medias(self, medias, use_patterns=True) -> list:
         messages_to_send = []
-        for media in medias:
+        for media in medias[-1:]:
             post_text = media.caption_text
-            for word in env.PATTERNS:
-                if word in post_text:
-                    message = self.decorate_message_for_telegram(media, post_text)
-                    self.add_message_to_queue(media, messages_to_send, message)
+            if use_patterns:
+                for word in env.PATTERNS:
+                    if word in post_text:
+                        message = self.decorate_message_for_telegram(media, post_text)
+                        self.add_message_to_queue(media, messages_to_send, message)
+            else:
+                message = self.decorate_message_for_telegram(media, post_text)
+                self.add_message_to_queue(media, messages_to_send, message)
         return messages_to_send
 
     def decorate_message_for_telegram(self, media, post_text):
@@ -126,25 +139,25 @@ class GuestBartending:
         messages_to_send = self.get_user_media(username)
         self.send_messages(messages_to_send)
 
-    def send_messages(self, messages_to_send: list[MediaMessage]):
+    async def send_messages(self, messages_to_send: list[MediaMessage]):
         for message in messages_to_send:
             if message.media_type == "video":
-                self.send_video(message)
+                await self.send_video(message)
             elif message.media_type == "photo":
-                self.send_photo(message)
+                await self.send_photo(message)
             else:
                 raise Exception(f"unknown media type: {message.media_type}")
 
-    def send_video(self, message: MediaMessage):
-        self.bot.send_video(
+    async def send_video(self, message: MediaMessage):
+        await self.bot.send_video(
             chat_id=message.chat_id,
             video=message.media,
             caption=message.caption,
             parse_mode=message.parse_mode,
         )
 
-    def send_photo(self, message: MediaMessage):
-        self.bot.send_photo(
+    async def send_photo(self, message: MediaMessage):
+        await self.bot.send_photo(
             chat_id=message.chat_id,
             photo=message.media,
             caption=message.caption,
@@ -154,4 +167,4 @@ class GuestBartending:
 
 if __name__ == "__main__":
     guest = GuestBartending()
-    guest.parse_following_accounts()
+    asyncio.run(guest.parse_following_accounts())
